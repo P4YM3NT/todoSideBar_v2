@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>todoSideBar</title>
+    <script>
+      // Laeuft vor dem Bundle. Ohne das zeichnet der WebView eine volle Runde
+      // im hellen Theme - schwarze Schrift auf Weiss -, bevor React ueberhaupt
+      // geladen ist, und springt danach sichtbar auf Dunkel um. Besonders
+      // auffaellig im Detailfenster, das jedes Mal frisch aufgebaut wird.
+      //
+      // Haelt sich bewusst an dieselben Werte wie `applyMirroredTheme` in
+      // src/lib/theme.ts; wer den Schluessel dort aendert, muss es hier auch.
+      try {
+        var t = localStorage.getItem("todosidebar.theme");
+        if (
+          t === "dark" ||
+          (t === "system" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches)
+        ) {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (e) {
+        // Ohne Spiegel bleibt es beim hellen Theme - mehr passiert nicht.
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+target/
+
+# Von Tauri bei jedem Build neu erzeugt.
+apps/sidebar/src-tauri/gen/schemas/
+*.log
+.DS_Store
+.env
+.env.local
