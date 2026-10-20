@@ -116,6 +116,7 @@ fn update_clears_fields_that_are_none() {
         due_on: None,
         priority: 0,
         estimate_minutes: None,
+        ..Default::default()
     }).unwrap();
 
     assert_eq!(updated.title, "ohne Notiz");

@@ -17,6 +17,18 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "004_project_fields",
         include_str!("../migrations/004_project_fields.sql"),
     ),
+    (
+        "005_notifications",
+        include_str!("../migrations/005_notifications.sql"),
+    ),
+    (
+        "006_calendar_sync",
+        include_str!("../migrations/006_calendar_sync.sql"),
+    ),
+    (
+        "007_task_times",
+        include_str!("../migrations/007_task_times.sql"),
+    ),
 ];
 
 /// Öffnet die Datenbank und bringt sie auf den aktuellen Schemastand.

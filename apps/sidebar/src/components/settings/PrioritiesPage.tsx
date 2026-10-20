@@ -1,7 +1,7 @@
 import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { type AppSettings, type Priority, setPriorities } from "@/lib/ipc";
 import { ColorSwatch } from "@/components/settings/ColorSwatch";
-import { SubPage } from "@/components/settings/Shared";
+import { SubPage } from "@/components/Shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 

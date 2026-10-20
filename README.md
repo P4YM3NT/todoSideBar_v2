@@ -9,7 +9,11 @@ Hotkey klappt die Spalte auf, ein weiterer wieder zu. Für alles, was in einer
 220 px breiten Spalte keinen Platz hat, öffnet sich ein zweites Fenster.
 
 Gebaut mit [Tauri 2](https://tauri.app), React 19 und SQLite. Die Daten liegen
-ausschließlich lokal — kein Konto, kein Server, keine Netzwerkverbindung.
+lokal — kein App-Konto, kein eigener Server. Optional lassen sich native
+Benachrichtigungen und E-Mails über einen selbst eingerichteten SMTP-Zugang aktivieren.
+Datierte Aufgaben lassen sich außerdem mit Apple-Kalendern (macOS, über EventKit)
+und Google Kalender (direkt per OAuth) in beide Richtungen synchronisieren – und
+erscheinen damit auch in Notion Calendar.
 
 **→ [Was die App kann, im Einzelnen](FEATURES.md)**
 
@@ -70,10 +74,11 @@ Das fertige Paket landet unter:
 Unter macOS die `.app` nach `/Programme` ziehen, unter Windows den Installer
 ausführen.
 
-### Hinweis für macOS: unsignierte Builds
+### Hinweis für macOS: lokale Builds
 
-Ein selbst gebautes Paket ist nicht signiert und nicht notarisiert. macOS
-verweigert den ersten Start deshalb mit „… kann nicht geöffnet werden".
+Ein selbst gebautes Paket wird lokal ad hoc signiert, ist aber nicht mit einer
+Developer-ID signiert und nicht notarisiert. Falls macOS den ersten Start mit
+„… kann nicht geöffnet werden" verweigert:
 Entweder einmalig über **Systemeinstellungen → Datenschutz & Sicherheit →
 Trotzdem öffnen** freigeben, oder das Quarantäne-Merkmal direkt entfernen:
 
@@ -87,6 +92,7 @@ xattr -dr com.apple.quarantine /Applications/todoSideBar.app
 pnpm dev         # Tauri im Entwicklungsmodus, mit Hot Reload im Frontend
 pnpm typecheck   # TypeScript prüfen
 pnpm test        # Rust-Tests des Workspace
+pnpm test:frontend # Sortierung und Speicherung im Frontend prüfen
 ```
 
 ## Wo die Daten liegen

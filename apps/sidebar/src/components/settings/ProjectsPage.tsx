@@ -13,7 +13,7 @@ import { type AppSettings, setShowSubtasks } from "@/lib/ipc";
 import { notifyTasksChanged } from "@/lib/detail";
 import { PROJECT_ICONS, projectIcon } from "@/lib/projectIcons";
 import { ColorSwatch } from "@/components/settings/ColorSwatch";
-import { Row, SubPage } from "@/components/settings/Shared";
+import { Row, SubPage } from "@/components/Shared";
 import { DateField } from "@/components/DateField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -22,16 +22,18 @@ export function Row({
 export function SubPage({
   title,
   onBack,
+  backDisabled = false,
   children,
 }: {
   title: string;
   onBack: () => void;
+  backDisabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex h-full flex-col gap-4">
       <header className="flex items-center gap-1">
-        <Button variant="ghost" size="icon-sm" onClick={onBack} aria-label="Zurück">
+        <Button variant="ghost" size="icon-sm" onClick={onBack} disabled={backDisabled} aria-label="Zurück">
           <ChevronLeft className="size-4" />
         </Button>
         <h1 className="text-sm font-medium">{title}</h1>

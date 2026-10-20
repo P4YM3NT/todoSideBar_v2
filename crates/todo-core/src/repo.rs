@@ -2,13 +2,16 @@
 //! benutzt exakt dieselben Funktionen.
 
 use crate::error::{CoreError, Result};
-use crate::models::{NewTask, Project, ProjectFields, Status, Task, TaskFields, TaskView};
+use crate::models::{
+    DueFilter, ListQuery, NewTask, Project, ProjectFields, Status, StatusFilter, Task,
+    TaskFields, TaskFilter, TaskView,
+};
 use chrono::Utc;
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, Row, ToSql, params, params_from_iter};
 use std::collections::HashMap;
 
 const TASK_COLUMNS: &str = "id, title, description, notes, project_id, parent_id, \
-     status, scheduled_on, due_on, priority, estimate_minutes, sort_order, \
+     status, scheduled_on, due_on, starts_at, ends_at, ends_on, priority, estimate_minutes, sort_order, \
      completed_at, created_at, updated_at";
 
 fn now() -> String {
@@ -33,6 +36,9 @@ fn row_to_task(row: &Row) -> rusqlite::Result<Task> {
         status: Status::parse(&status),
         scheduled_on: row.get("scheduled_on")?,
         due_on: row.get("due_on")?,
+        starts_at: row.get("starts_at")?,
+        ends_at: row.get("ends_at")?,
+        ends_on: row.get("ends_on")?,
         priority: row.get("priority")?,
         estimate_minutes: row.get("estimate_minutes")?,
         sort_order: row.get("sort_order")?,
@@ -57,14 +63,15 @@ pub fn create_task(conn: &Connection, new: NewTask) -> Result<Task> {
     if title.is_empty() {
         return Err(CoreError::Invalid("Titel darf nicht leer sein".into()));
     }
+    crate::calendar::validate_schedule(new.scheduled_on.or(new.due_on), new.ends_on, new.starts_at, new.ends_at)?;
 
     let id = new_id();
     let ts = now();
     conn.execute(
         "INSERT INTO tasks (id, title, description, notes, project_id, parent_id,
                             status, scheduled_on, due_on, priority,
-                            estimate_minutes, sort_order, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'open', ?7, ?8, ?9, ?10, ?11, ?12, ?12)",
+                            estimate_minutes, sort_order, created_at, updated_at, starts_at, ends_at, ends_on)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'open', ?7, ?8, ?9, ?10, ?11, ?12, ?12, ?13, ?14, ?15)",
         params![
             id,
             title,
@@ -78,6 +85,9 @@ pub fn create_task(conn: &Connection, new: NewTask) -> Result<Task> {
             new.estimate_minutes,
             sort_order_for_top(conn)?,
             ts,
+            new.starts_at,
+            new.ends_at,
+            new.ends_on,
         ],
     )?;
     get_task(conn, &id)
@@ -98,53 +108,186 @@ pub fn get_task(conn: &Connection, id: &str) -> Result<Task> {
 /// `include_subtasks` steuert, ob Unteraufgaben als eigene Zeilen erscheinen.
 /// Standardmaessig nicht - sonst stuende jede Unteraufgabe doppelt in der Liste,
 /// einmal fuer sich und einmal unter ihrer Hauptaufgabe.
-pub fn list_tasks(
-    conn: &Connection,
-    view: &TaskView,
-    include_subtasks: bool,
-) -> Result<Vec<Task>> {
-    let today = Utc::now().date_naive();
+///
+/// Die schlichte Fassung ohne Filter und ohne eigene Sortierung. Bleibt
+/// bestehen, weil sie an vielen Stellen so gebraucht wird - und weil die
+/// vorhandenen Tests damit weiter genau das Standardverhalten bewachen.
+pub fn list_tasks(conn: &Connection, view: &TaskView, include_subtasks: bool) -> Result<Vec<Task>> {
+    query_tasks(
+        conn,
+        &ListQuery {
+            view: view.clone(),
+            include_subtasks,
+            ..Default::default()
+        },
+    )
+}
 
-    // Erledigtes zuerst nach Abschlusszeit, alles andere nach Sortierung -
-    // in "Erledigt" will man das Neueste oben sehen.
-    let (where_clause, order, params): (&str, &str, Vec<&dyn rusqlite::ToSql>) = match view {
-        TaskView::Inbox => (
-            "status = 'open' AND project_id IS NULL",
-            "sort_order ASC",
-            vec![],
-        ),
-        TaskView::Today => (
-            "status = 'open' AND (scheduled_on <= ?1 OR due_on <= ?1)",
-            "due_on IS NULL, due_on ASC, sort_order ASC",
-            vec![&today],
-        ),
-        TaskView::Upcoming => (
-            "status = 'open' AND (scheduled_on > ?1 OR due_on > ?1)",
-            "COALESCE(scheduled_on, due_on) ASC, sort_order ASC",
-            vec![&today],
-        ),
-        TaskView::Project(id) => (
-            "status = 'open' AND project_id = ?1",
-            "sort_order ASC",
-            vec![id],
-        ),
-        TaskView::Done => ("status = 'done'", "completed_at DESC", vec![]),
-        TaskView::All => ("1 = 1", "sort_order ASC", vec![]),
+/// Was eine Ansicht vorgibt.
+///
+/// Die Statusbedingung steht getrennt, weil der Filter sie **ersetzen** koennen
+/// muss. Haenge man sie mit `AND` daneben, liesse sich "alle Zustaende" nie
+/// ausdruecken - die Ansicht wuerde immer dazwischenfunken.
+struct ViewSql {
+    /// `None` = die Ansicht legt sich nicht fest.
+    status: Option<&'static str>,
+    /// Alles Uebrige. `?` steht fuer heute bzw. die Projekt-ID.
+    rest: &'static str,
+    order: &'static str,
+    /// Wie oft `rest` das heutige Datum bindet.
+    date_params: usize,
+}
+
+fn view_sql(view: &TaskView) -> ViewSql {
+    match view {
+        TaskView::Inbox => ViewSql {
+            status: Some("open"),
+            rest: "project_id IS NULL",
+            order: "sort_order ASC",
+            date_params: 0,
+        },
+        TaskView::Today => ViewSql {
+            status: Some("open"),
+            rest: "(scheduled_on <= ? OR due_on <= ?)",
+            order: "due_on IS NULL, due_on ASC, sort_order ASC",
+            date_params: 2,
+        },
+        TaskView::Upcoming => ViewSql {
+            status: Some("open"),
+            rest: "(scheduled_on > ? OR due_on > ?)",
+            order: "COALESCE(scheduled_on, due_on) ASC, sort_order ASC",
+            date_params: 2,
+        },
+        TaskView::Project(_) => ViewSql {
+            status: Some("open"),
+            rest: "project_id = ?",
+            order: "sort_order ASC",
+            date_params: 0,
+        },
+        // Erledigtes nach Abschlusszeit - dort will man das Neueste oben sehen.
+        TaskView::Done => ViewSql {
+            status: Some("done"),
+            rest: "1 = 1",
+            order: "completed_at DESC",
+            date_params: 0,
+        },
+        TaskView::All => ViewSql {
+            status: None,
+            rest: "1 = 1",
+            order: "sort_order ASC",
+            date_params: 0,
+        },
+    }
+}
+
+/// Baut die Filterbedingungen und sammelt ihre Parameter ein.
+fn filter_sql(filter: &TaskFilter, today: &str, out: &mut Vec<Box<dyn ToSql>>) -> Vec<String> {
+    let mut clauses = Vec::new();
+
+    if !filter.projects.is_empty() {
+        // `IN` trifft NULL in SQL nicht - "ohne Projekt" braucht deshalb einen
+        // eigenen Zweig statt eines NULL-Eintrags in der Liste.
+        let (ids, inbox): (Vec<_>, Vec<_>) = filter.projects.iter().partition(|p| p.is_some());
+
+        let mut parts = Vec::new();
+        if !ids.is_empty() {
+            let holes = vec!["?"; ids.len()].join(", ");
+            parts.push(format!("project_id IN ({holes})"));
+            for id in ids.into_iter().flatten() {
+                out.push(Box::new(id.clone()));
+            }
+        }
+        if !inbox.is_empty() {
+            parts.push("project_id IS NULL".into());
+        }
+        clauses.push(format!("({})", parts.join(" OR ")));
+    }
+
+    if !filter.priorities.is_empty() {
+        let holes = vec!["?"; filter.priorities.len()].join(", ");
+        clauses.push(format!("priority IN ({holes})"));
+        for p in &filter.priorities {
+            out.push(Box::new(*p));
+        }
+    }
+
+    match filter.due {
+        DueFilter::Any => {}
+        DueFilter::Overdue => {
+            clauses.push("(due_on IS NOT NULL AND due_on < ?)".into());
+            out.push(Box::new(today.to_string()));
+        }
+        DueFilter::Today => {
+            clauses.push("due_on = ?".into());
+            out.push(Box::new(today.to_string()));
+        }
+        DueFilter::Week => {
+            // Ueberfaelliges ausdruecklich mit drin: was letzte Woche faellig
+            // war, gehoert in dieser Woche erst recht auf den Schirm.
+            clauses.push("(due_on IS NOT NULL AND due_on <= ?)".into());
+            out.push(Box::new(
+                (Utc::now().date_naive() + chrono::Duration::days(7)).to_string(),
+            ));
+        }
+        DueFilter::NoDate => clauses.push("due_on IS NULL".into()),
+    }
+
+    clauses
+}
+
+/// Liste mit Filter und frei waehlbarer Sortierung.
+///
+/// Die Ansicht liefert weiterhin die Grundbedingung; der Filter haengt sich mit
+/// `AND` daran, die Sortierung ersetzt die der Ansicht.
+///
+/// Die Parameter sind anonyme `?` statt nummerierter `?1`: bei einer `IN`-Liste
+/// veraenderlicher Laenge steht ihre Zahl nicht mehr fest. Der Preis ist, dass
+/// "Heute" und "Demnaechst" das Datum zweimal binden statt einmal - deshalb
+/// gibt `view_sql` mit zurueck, wie oft es gebraucht wird.
+pub fn query_tasks(conn: &Connection, query: &ListQuery) -> Result<Vec<Task>> {
+    let today = Utc::now().date_naive().to_string();
+    let view = view_sql(&query.view);
+
+    // Der Filter ersetzt die Statusvorgabe der Ansicht, statt sich danebenzu-
+    // haengen. `Inherit` laesst ihr den Vortritt, `All` streicht sie ganz.
+    let status = match query.filter.status {
+        StatusFilter::Inherit => view.status,
+        StatusFilter::Open => Some("open"),
+        StatusFilter::Done => Some("done"),
+        StatusFilter::All => None,
     };
 
-    let subtask_clause = if include_subtasks {
-        ""
-    } else {
-        "AND parent_id IS NULL"
+    let mut where_clause = match status {
+        Some(s) => format!("status = '{s}' AND {}", view.rest),
+        None => view.rest.to_string(),
     };
+
+    let mut params: Vec<Box<dyn ToSql>> = Vec::new();
+    for _ in 0..view.date_params {
+        params.push(Box::new(today.clone()));
+    }
+    if let TaskView::Project(id) = &query.view {
+        params.push(Box::new(id.clone()));
+    }
+
+    for clause in filter_sql(&query.filter, &today, &mut params) {
+        where_clause.push_str(" AND ");
+        where_clause.push_str(&clause);
+    }
+
+    if !query.include_subtasks {
+        where_clause.push_str(" AND parent_id IS NULL");
+    }
+
+    let order = query.sort.unwrap_or_default().order_by(view.order);
 
     let sql = format!(
         "SELECT {TASK_COLUMNS} FROM tasks
-         WHERE deleted_at IS NULL AND {where_clause} {subtask_clause}
+         WHERE deleted_at IS NULL AND {where_clause}
          ORDER BY {order}"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(params.as_slice(), row_to_task)?;
+    let rows = stmt.query_map(params_from_iter(params.iter()), row_to_task)?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
@@ -164,11 +307,13 @@ pub fn update_task(conn: &Connection, id: &str, fields: TaskFields) -> Result<Ta
     if title.is_empty() {
         return Err(CoreError::Invalid("Titel darf nicht leer sein".into()));
     }
+    crate::calendar::validate_schedule(fields.scheduled_on.or(fields.due_on), fields.ends_on, fields.starts_at, fields.ends_at)?;
 
     let changed = conn.execute(
         "UPDATE tasks SET title = ?2, description = ?3, notes = ?4, project_id = ?5,
                           scheduled_on = ?6, due_on = ?7, priority = ?8,
-                          estimate_minutes = ?9, updated_at = ?10
+                          estimate_minutes = ?9, updated_at = ?10,
+                          starts_at = ?11, ends_at = ?12, ends_on = ?13
          WHERE id = ?1 AND deleted_at IS NULL",
         params![
             id,
@@ -181,6 +326,9 @@ pub fn update_task(conn: &Connection, id: &str, fields: TaskFields) -> Result<Ta
             fields.priority,
             fields.estimate_minutes,
             now(),
+            fields.starts_at,
+            fields.ends_at,
+            fields.ends_on,
         ],
     )?;
     if changed == 0 {
@@ -334,6 +482,9 @@ fn copy_of(
             parent_id,
             scheduled_on: src.scheduled_on,
             due_on: src.due_on,
+            starts_at: src.starts_at,
+            ends_at: src.ends_at,
+            ends_on: src.ends_on,
             priority: Some(src.priority),
             estimate_minutes: src.estimate_minutes,
         },

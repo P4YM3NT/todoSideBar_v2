@@ -7,7 +7,7 @@ import {
 import { BACKGROUND_PRESETS, BACKGROUND_PRESETS_MORE } from "@/lib/accent";
 import { ColorField } from "@/components/settings/ColorField";
 import { type Theme, applyTheme } from "@/lib/theme";
-import { Row, SubPage } from "@/components/settings/Shared";
+import { Row, SubPage } from "@/components/Shared";
 import { Slider } from "@/components/ui/slider";
 import {
   Select,

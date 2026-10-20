@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSCalendarsUsageDescription</key>
+    <string>todoSideBar synchronisiert ausgewählte Aufgaben mit deinen Kalendern.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>todoSideBar liest und aktualisiert eigene Termine in ausgewählten Kalendern, damit Aufgaben und Kalender übereinstimmen.</string>
+</dict>
+</plist>

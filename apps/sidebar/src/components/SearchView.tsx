@@ -82,6 +82,9 @@ export function SearchView({ priorities, onClose, onChanged }: Props) {
           loading={false}
           error={error}
           emptyHint="Keine Treffer."
+          // Die Suche kennt keinen Filter - sie sucht ueber alles.
+          filtered={false}
+          onResetFilter={() => {}}
           // Abgehaktes gleitet hier bewusst nicht hinaus: ein Treffer soll
           // stehen bleiben, man hat ihn ja gerade gesucht.
           leaving={new Set()}

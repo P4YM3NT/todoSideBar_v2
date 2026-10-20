@@ -16,6 +16,7 @@ pub const KEY_THEME: &str = "appearance.theme";
 pub const KEY_BG_ALPHA: &str = "appearance.backgroundAlpha";
 pub const KEY_BG_COLOR: &str = "appearance.backgroundColor";
 pub const KEY_PRIORITIES: &str = "tasks.priorities";
+pub const KEY_FILTER_PRESETS: &str = "tasks.filterPresets";
 pub const KEY_SHOW_SUBTASKS: &str = "tasks.showSubtasks";
 
 /// Deckkraft der Sidebar-Flaeche in Prozent.

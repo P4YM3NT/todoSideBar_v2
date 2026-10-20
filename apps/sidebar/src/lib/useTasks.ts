@@ -16,6 +16,7 @@ import {
   viewKey,
 } from "./tasks";
 import { notifyTasksChanged, onTasksChanged } from "./detail";
+import { DEFAULT_SORT, EMPTY_FILTER, type SortSpec, type TaskFilter } from "./filters";
 
 /** Wie lange der gesetzte Haken stehen bleibt, bevor die Zeile geht. */
 const LINGER_MS = 320;
@@ -28,7 +29,12 @@ const LEAVE_MS = 380;
  * Bewusst ohne Server-State-Bibliothek: die Daten liegen lokal in SQLite,
  * es gibt kein Netzwerk, kein Caching-Problem und keine Revalidierung.
  */
-export function useTasks(view: View, showSubtasks: boolean) {
+export function useTasks(
+  view: View,
+  showSubtasks: boolean,
+  filter: TaskFilter = EMPTY_FILTER,
+  sort: SortSpec = DEFAULT_SORT,
+) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -49,7 +55,7 @@ export function useTasks(view: View, showSubtasks: boolean) {
           : undefined;
       const include = project ? project.showSubtasks : showSubtasks;
       const [t, c] = await Promise.all([
-        listTasks(view, include),
+        listTasks(view, include, filter, sort),
         projectOpenCounts(),
       ]);
       const p = projectList;
@@ -64,7 +70,7 @@ export function useTasks(view: View, showSubtasks: boolean) {
     }
     // `key` statt `view`: das Objekt ist bei jedem Render neu, der Schlüssel nicht.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, showSubtasks]);
+  }, [key, showSubtasks, filter, sort]);
 
   useEffect(() => {
     setLoading(true);
@@ -97,7 +103,10 @@ export function useTasks(view: View, showSubtasks: boolean) {
   const toggle = useCallback(
     async (task: Task) => {
       const done = task.status === "open";
-      const leaves = view.kind !== "all";
+      const status = filter.status === "inherit"
+        ? (view.kind === "all" ? "all" : view.kind === "done" ? "done" : "open")
+        : filter.status;
+      const leaves = status !== "all";
 
       setTasks((prev) =>
         prev.map((t) =>
@@ -122,7 +131,7 @@ export function useTasks(view: View, showSubtasks: boolean) {
         });
       }
     },
-    [reload, view.kind],
+    [reload, view.kind, filter.status],
   );
 
   /**

@@ -16,6 +16,8 @@ fn migrations_create_expected_schema() {
         vec![
             "_migrations",
             "attachments",
+            "calendar_links",
+            "notification_deliveries",
             "projects",
             "settings",
             "tags",
@@ -71,4 +73,3 @@ fn migration_002_adds_columns_to_existing_data() {
     assert_eq!(desc, None, "neue Spalte muss fuer alte Zeilen leer sein");
     assert_eq!(est, None);
 }
-

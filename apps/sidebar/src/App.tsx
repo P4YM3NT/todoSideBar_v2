@@ -10,6 +10,7 @@ import {
   commitSidebarWidth,
   getSettings,
   onShowSettings,
+  setFilterPresets,
   toggleSidebar,
 } from "@/lib/ipc";
 import { isDarkColor, readableOn } from "@/lib/accent";
@@ -172,6 +173,11 @@ export function App() {
               showSubtasks={settings?.showSubtasks ?? false}
               theme={settings?.theme ?? "light"}
               addHotkey={settings?.addHotkey ?? null}
+              presets={settings?.filterPresets ?? []}
+              onPresetsChange={(filterPresets) => {
+                void setFilterPresets(filterPresets);
+                setSettings((prev) => (prev ? { ...prev, filterPresets } : prev));
+              }}
               onThemeChange={changeTheme}
               onViewChange={changeView}
               onOpenSettings={() => setView("settings")}

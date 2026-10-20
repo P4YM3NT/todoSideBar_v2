@@ -1,7 +1,7 @@
 import { type AppSettings, setCheckboxColor } from "@/lib/ipc";
 import { ACCENT_PRESETS } from "@/lib/accent";
 import { ColorField } from "@/components/settings/ColorField";
-import { Row, SubPage } from "@/components/settings/Shared";
+import { Row, SubPage } from "@/components/Shared";
 
 type Props = {
   settings: AppSettings;

@@ -1,5 +1,7 @@
 mod commands;
+mod calendar;
 mod detail;
+mod notifications;
 mod shortcuts;
 mod tasks;
 mod store;
@@ -26,14 +28,30 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(window::Sidebar::default())
         .manage(detail::DetailTarget::default())
         .manage(detail::DetailRestore::default())
         .manage(detail::DetailBackground::default())
         .manage(detail::DetailEpoch::default())
+        .manage(notifications::NotificationState::default())
+        .manage(calendar::CalendarState::default())
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
+            calendar::calendar_status,
+            calendar::request_calendar_access,
+            calendar::list_calendars,
+            calendar::set_calendar_sync,
+            calendar::sync_calendars_now,
+            calendar::google_connect,
+            calendar::google_disconnect,
+            notifications::set_notification_channel,
+            notifications::set_notification_time,
+            notifications::save_email_config,
+            notifications::clear_email_config,
+            notifications::test_notification,
+            notifications::notification_status,
             commands::set_hotkey,
             commands::set_add_hotkey,
             commands::set_checkbox_color,
@@ -41,6 +59,7 @@ pub fn run() {
             commands::set_background_alpha,
             commands::set_background_color,
             commands::set_priorities,
+            commands::set_filter_presets,
             commands::set_show_subtasks,
             commands::sidebar_state,
             commands::sidebar_expand,
@@ -110,6 +129,9 @@ pub fn run() {
                 window.show()?;
             }
             *app.state::<window::Sidebar>().state.lock().unwrap() = snapshot;
+
+            notifications::start(app.handle().clone());
+            calendar::start(app.handle().clone());
 
             Ok(())
         })

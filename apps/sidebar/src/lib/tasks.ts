@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { SortSpec, TaskFilter } from "./filters";
 
 export type Status = "open" | "done";
 
@@ -15,6 +16,10 @@ export type Task = {
   status: Status;
   /** "Wann arbeite ich dran" - die Planung. */
   scheduledOn: string | null;
+  /** Absolute instants; UI displays local time. */
+  startsAt: string | null;
+  endsAt: string | null;
+  endsOn: string | null;
   /** "Bis wann muss es fertig sein" - die Deadline. */
   dueOn: string | null;
   priority: number;
@@ -64,6 +69,9 @@ export type NewTask = {
   projectId?: string | null;
   parentId?: string | null;
   scheduledOn?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  endsOn?: string | null;
   dueOn?: string | null;
   priority?: number | null;
   estimateMinutes?: number | null;
@@ -75,13 +83,22 @@ export type TaskFields = {
   notes: string | null;
   projectId: string | null;
   scheduledOn: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  endsOn: string | null;
   dueOn: string | null;
   priority: number;
   estimateMinutes: number | null;
 };
 
-export const listTasks = (view: View, includeSubtasks = false) =>
-  invoke<Task[]>("list_tasks", { view, includeSubtasks });
+export const listTasks = (
+  view: View,
+  includeSubtasks = false,
+  filter?: TaskFilter,
+  sort?: SortSpec,
+) => invoke<Task[]>("list_tasks", {
+  view, includeSubtasks, filter: filter ?? null, sort: sort ?? null,
+});
 
 export const listSubtasks = (parentId: string) =>
   invoke<Task[]>("list_subtasks", { parentId });

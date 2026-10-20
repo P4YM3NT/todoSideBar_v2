@@ -1,16 +1,22 @@
 import { useState } from "react";
 import {
+  Bell,
+  CalendarDays,
   ChevronRight,
   FolderOpen,
   Flag,
   Keyboard,
+  ListFilter,
   Palette,
   SlidersHorizontal,
 } from "lucide-react";
 import type { AppSettings } from "@/lib/ipc";
 import { BackgroundPage } from "@/components/settings/BackgroundPage";
 import { ControlsPage } from "@/components/settings/ControlsPage";
+import { FiltersPage } from "@/components/settings/FiltersPage";
 import { GeneralPage } from "@/components/settings/GeneralPage";
+import { NotificationsPage } from "@/components/settings/NotificationsPage";
+import { CalendarPage } from "@/components/settings/CalendarPage";
 import { PrioritiesPage } from "@/components/settings/PrioritiesPage";
 import { ProjectsPage } from "@/components/settings/ProjectsPage";
 import { Button } from "@/components/ui/button";
@@ -44,10 +50,28 @@ const PAGES = [
     icon: Flag,
   },
   {
+    id: "filters",
+    label: "Filter & Sortierung",
+    hint: "Presets",
+    icon: ListFilter,
+  },
+  {
+    id: "notifications",
+    label: "Benachrichtigungen",
+    hint: "Native Popups, E-Mail, Erinnerungszeit",
+    icon: Bell,
+  },
+  {
     id: "controls",
     label: "Bedienung",
     hint: "Hotkeys, Griff",
     icon: Keyboard,
+  },
+  {
+    id: "calendar",
+    label: "Kalendersync",
+    hint: "Apple, Google, automatische Synchronisierung",
+    icon: CalendarDays,
   },
 ] as const;
 
@@ -79,8 +103,17 @@ export function Settings({ settings, onClose, onChange }: Props) {
   if (page === "priorities") {
     return <PrioritiesPage settings={settings} onChange={apply} onBack={back} />;
   }
+  if (page === "filters") {
+    return <FiltersPage settings={settings} onChange={apply} onBack={back} />;
+  }
   if (page === "controls") {
     return <ControlsPage settings={settings} onChange={apply} onBack={back} />;
+  }
+  if (page === "notifications") {
+    return <NotificationsPage settings={settings} onChange={apply} onBack={back} />;
+  }
+  if (page === "calendar") {
+    return <CalendarPage settings={settings} onChange={apply} onBack={back} />;
   }
 
   return (

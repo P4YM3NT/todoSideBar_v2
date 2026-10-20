@@ -4,8 +4,10 @@
 //! spätere Voll-App teilen es sich unverändert.
 
 pub mod db;
+pub mod calendar;
 pub mod error;
 pub mod models;
+pub mod notifications;
 pub mod repo;
 pub mod settings;
 

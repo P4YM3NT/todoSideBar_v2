@@ -34,6 +34,8 @@ import {
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { DateField } from "@/components/DateField";
 import { SubtaskList } from "@/components/SubtaskList";
+import { ScheduleFields } from "@/components/ScheduleFields";
+import { shiftSchedule } from "@/lib/schedule";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -93,6 +95,9 @@ const emptyFields = (): TaskFields => ({
   notes: null,
   projectId: null,
   scheduledOn: null,
+  startsAt: null,
+  endsAt: null,
+  endsOn: null,
   dueOn: null,
   priority: 0,
   estimateMinutes: null,
@@ -104,6 +109,9 @@ const fieldsOf = (task: Task): TaskFields => ({
   notes: task.notes,
   projectId: task.projectId,
   scheduledOn: task.scheduledOn,
+  startsAt: task.startsAt,
+  endsAt: task.endsAt,
+  endsOn: task.endsOn,
   dueOn: task.dueOn,
   priority: task.priority,
   estimateMinutes: task.estimateMinutes,
@@ -132,6 +140,7 @@ function Chip({
 export function TaskDetail() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [fields, setFields] = useState<TaskFields>(emptyFields);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [priorities, setPriorities] = useState<Priority[]>([]);
   const [busy, setBusy] = useState(false);
@@ -150,6 +159,9 @@ export function TaskDetail() {
     const mine = ++run.current;
 
     setError(null);
+    // Das Fenster ueberlebt das Schliessen - ein haengengebliebener Zustand aus
+    // dem vorigen Speichern darf die neue Aufgabe nicht blockieren.
+    setBusy(false);
     setTaskId(target.taskId);
     // Ohne das behaelt das Fenster die Scrollposition der vorigen Aufgabe -
     // beim Oeffnen einer Unteraufgabe startet man dann mitten im Dokument.
@@ -233,6 +245,7 @@ export function TaskDetail() {
 
   const save = useCallback(async () => {
     if (!fields.title.trim() || busy) return;
+    if (scheduleError) { setError(scheduleError); return; }
     setBusy(true);
     setError(null);
     try {
@@ -243,9 +256,19 @@ export function TaskDetail() {
       await closeDetail();
     } catch (e) {
       setError(String(e));
+    } finally {
+      // Muss auch im Erfolgsfall zurueck. Frueher wurde das Fenster beim
+      // Sichern zerstoert und nahm den Zustand mit; seit es nur noch versteckt
+      // wird, bliebe `busy` sonst fuer immer stehen - und jedes weitere
+      // Speichern liefe stumm in die Sperre oben.
       setBusy(false);
     }
-  }, [fields, busy, taskId]);
+  }, [fields, busy, taskId, scheduleError]);
+
+  const changeDate = (scheduledOn: string | null, dueOn: string | null) => {
+    try { setFields(shiftSchedule(fields, scheduledOn, dueOn)); setError(null); }
+    catch (e) { setError((e as Error).message); }
+  };
 
   // Tastatur wie in nativen Dialogen: sichern mit Cmd+Enter, schliessen mit Esc.
   useEffect(() => {
@@ -388,12 +411,12 @@ export function TaskDetail() {
             <DateField
               value={fields.scheduledOn}
               placeholder="Geplant"
-              onChange={(v) => set("scheduledOn", v)}
+              onChange={(v) => changeDate(v, fields.dueOn)}
             />
             <DateField
               value={fields.dueOn}
               placeholder="Fällig"
-              onChange={(v) => set("dueOn", v)}
+              onChange={(v) => changeDate(fields.scheduledOn, v)}
               icon={CalendarClock}
             />
 
@@ -413,6 +436,8 @@ export function TaskDetail() {
               />
               <span className="text-xs text-muted-foreground">min</span>
             </span>
+
+            <ScheduleFields key={`${taskId ?? "new"}-${run.current}`} fields={fields} onChange={setFields} onError={setScheduleError} />
           </div>
 
           {/* Erst nach dem Speichern moeglich: eine Unteraufgabe braucht eine

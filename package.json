@@ -5,6 +5,7 @@
     "dev": "pnpm --filter sidebar tauri dev",
     "build": "pnpm --filter sidebar tauri build",
     "typecheck": "pnpm --filter sidebar typecheck",
-    "test": "cargo test --workspace"
+    "test": "cargo test --workspace",
+    "test:frontend": "pnpm --filter sidebar test"
   }
 }

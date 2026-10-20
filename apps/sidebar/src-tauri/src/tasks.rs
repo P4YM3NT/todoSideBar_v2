@@ -5,7 +5,8 @@ use crate::store;
 use tauri::{AppHandle, Wry};
 use std::collections::HashMap;
 use todo_core::models::{
-    NewTask, Project, ProjectFields, Status, Task, TaskFields, TaskView,
+    ListQuery, NewTask, Project, ProjectFields, SortSpec, Status, Task, TaskFields, TaskFilter,
+    TaskView,
 };
 use todo_core::repo;
 
@@ -13,13 +14,29 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
+fn changed<T>(app: &AppHandle<Wry>, result: todo_core::Result<T>) -> Result<T, String> {
+    let value = result.map_err(err)?;
+    crate::calendar::wake(app);
+    Ok(value)
+}
+
+/// `filter` und `sort` sind optional: das Detailfenster holt sich die volle
+/// Liste ohne beides, und der Aufruf soll deswegen nicht laenger werden.
 #[tauri::command]
 pub fn list_tasks(
     app: AppHandle<Wry>,
     view: TaskView,
     include_subtasks: bool,
+    filter: Option<TaskFilter>,
+    sort: Option<SortSpec>,
 ) -> Result<Vec<Task>, String> {
-    store::with(&app, |c| repo::list_tasks(c, &view, include_subtasks)).map_err(err)
+    let query = ListQuery {
+        view,
+        include_subtasks,
+        filter: filter.unwrap_or_default(),
+        sort,
+    };
+    store::with(&app, |c| repo::query_tasks(c, &query)).map_err(err)
 }
 
 #[tauri::command]
@@ -29,7 +46,7 @@ pub fn list_subtasks(app: AppHandle<Wry>, parent_id: String) -> Result<Vec<Task>
 
 #[tauri::command]
 pub fn create_task(app: AppHandle<Wry>, task: NewTask) -> Result<Task, String> {
-    store::with(&app, |c| repo::create_task(c, task)).map_err(err)
+    changed(&app, store::with(&app, |c| repo::create_task(c, task)))
 }
 
 /// Freitextsuche ueber alle Aufgaben, unabhaengig von der Ansicht.
@@ -41,23 +58,23 @@ pub fn search_tasks(app: AppHandle<Wry>, query: String, limit: i64) -> Result<Ve
 /// Kopie samt Unteraufgaben, direkt unter dem Original.
 #[tauri::command]
 pub fn duplicate_task(app: AppHandle<Wry>, id: String) -> Result<Task, String> {
-    store::with(&app, |c| repo::duplicate_task(c, &id)).map_err(err)
+    changed(&app, store::with(&app, |c| repo::duplicate_task(c, &id)))
 }
 
 #[tauri::command]
 pub fn update_task(app: AppHandle<Wry>, id: String, fields: TaskFields) -> Result<Task, String> {
-    store::with(&app, |c| repo::update_task(c, &id, fields)).map_err(err)
+    changed(&app, store::with(&app, |c| repo::update_task(c, &id, fields)))
 }
 
 #[tauri::command]
 pub fn set_task_status(app: AppHandle<Wry>, id: String, done: bool) -> Result<Task, String> {
     let status = if done { Status::Done } else { Status::Open };
-    store::with(&app, |c| repo::set_status(c, &id, status)).map_err(err)
+    changed(&app, store::with(&app, |c| repo::set_status(c, &id, status)))
 }
 
 #[tauri::command]
 pub fn delete_task(app: AppHandle<Wry>, id: String) -> Result<(), String> {
-    store::with(&app, |c| repo::delete_task(c, &id)).map_err(err)
+    changed(&app, store::with(&app, |c| repo::delete_task(c, &id)))
 }
 
 #[tauri::command]

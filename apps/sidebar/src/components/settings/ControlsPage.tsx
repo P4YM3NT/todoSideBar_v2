@@ -9,7 +9,7 @@ import {
   commitSidebarWidth,
 } from "@/lib/ipc";
 import { HotkeyRecorder } from "@/components/HotkeyRecorder";
-import { Row, SubPage } from "@/components/settings/Shared";
+import { Row, SubPage } from "@/components/Shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";

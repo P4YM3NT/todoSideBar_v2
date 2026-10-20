@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Theme } from "./theme";
+import type { FilterPreset } from "./filters";
 
 export const HANDLE_W = 14;
 
@@ -55,9 +56,78 @@ export type AppSettings = {
   /** Eigene Hintergrundfarbe (beliebige CSS-Farbe). `null` = Themefarbe. */
   backgroundColor: string | null;
   priorities: Priority[];
+  filterPresets: FilterPreset[];
   /** Unteraufgaben in den festen Ansichten als eigene Zeilen zeigen. */
   showSubtasks: boolean;
+  notifications: NotificationSettings;
+  calendarSync: CalendarSettings;
 };
+
+export type CalendarSettings = { enabled: boolean; calendarIds: string[] };
+export type CalendarProvider = "apple" | "google";
+export type CalendarInfo = {
+  id: string;
+  title: string;
+  account: string;
+  writable: boolean;
+  provider: CalendarProvider;
+};
+/** Nicht geheime Google-Verbindungsdaten. Tokens liegen im Schlüsselbund. */
+export type GoogleConnection = { clientId: string | null; account: string | null };
+export type CalendarStatus = {
+  /** EventKit (Apple) verfügbar, also macOS. Google geht überall. */
+  supported: boolean;
+  permission: "notDetermined" | "authorized" | "writeOnly" | "denied" | "restricted";
+  syncing: boolean;
+  lastSyncedAt: string | null;
+  syncedTasks: number;
+  warnings: string[];
+  error: string | null;
+  google: GoogleConnection;
+};
+export const getCalendarStatus = () => invoke<CalendarStatus>("calendar_status");
+export const requestCalendarAccess = () => invoke<CalendarStatus>("request_calendar_access");
+export const listCalendars = () => invoke<CalendarInfo[]>("list_calendars");
+export const setCalendarSync = (config: CalendarSettings) =>
+  invoke<CalendarSettings>("set_calendar_sync", { config });
+export const syncCalendarsNow = () => invoke<CalendarStatus>("sync_calendars_now");
+/** Öffnet die Google-Anmeldung im Browser und wartet auf deren Abschluss. */
+export const connectGoogleCalendar = (clientId: string, clientSecret: string) =>
+  invoke<CalendarStatus>("google_connect", { clientId, clientSecret });
+export const disconnectGoogleCalendar = () => invoke<CalendarStatus>("google_disconnect");
+
+export type NotificationChannel = "popup" | "email";
+export type EmailConfig = {
+  host: string;
+  port: number;
+  security: "startTls" | "tls";
+  username: string;
+  from: string;
+  to: string;
+  hasPassword: boolean;
+};
+export type NotificationSettings = {
+  popupEnabled: boolean;
+  emailEnabled: boolean;
+  reminderTime: string;
+  email: EmailConfig | null;
+};
+export type NotificationStatus = {
+  popupError: string | null;
+  emailError: string | null;
+  lastEmailSentAt: string | null;
+};
+
+export const setNotificationChannel = (channel: NotificationChannel, enabled: boolean) =>
+  invoke<NotificationSettings>("set_notification_channel", { channel, enabled });
+export const setNotificationTime = (time: string) =>
+  invoke<NotificationSettings>("set_notification_time", { time });
+export const saveEmailConfig = (config: EmailConfig, password: string | null) =>
+  invoke<NotificationSettings>("save_email_config", { config, password });
+export const clearEmailConfig = () => invoke<NotificationSettings>("clear_email_config");
+export const testNotification = (channel: NotificationChannel) =>
+  invoke<void>("test_notification", { channel });
+export const getNotificationStatus = () => invoke<NotificationStatus>("notification_status");
 
 /**
  * `id` ist stabil und wird nie neu vergeben - `task.priority` zeigt darauf.
@@ -82,6 +152,9 @@ export const setBackgroundColor = (color: string | null) =>
 /** Entfernte Stufen werden dabei aus allen Aufgaben geräumt. */
 export const setPriorities = (priorities: Priority[]) =>
   invoke<void>("set_priorities", { priorities });
+
+export const setFilterPresets = (presets: FilterPreset[]) =>
+  invoke<void>("set_filter_presets", { presets });
 
 export const setShowSubtasks = (show: boolean) =>
   invoke<void>("set_show_subtasks", { show });

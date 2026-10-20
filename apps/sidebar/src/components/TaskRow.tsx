@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { CalendarDays, Clock, Copy, Maximize2, MoreHorizontal, Trash2 } from "lucide-react";
+import { useState, type KeyboardEvent, type PointerEvent } from "react";
+import { CalendarDays, Clock, Copy, GripVertical, Maximize2, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import type { Priority } from "@/lib/ipc";
 import type { Task } from "@/lib/tasks";
+import { scheduleLabel } from "@/lib/schedule";
 import { ICON_ACTION } from "@/lib/styles";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,11 @@ type Props = {
   onDuplicate: () => void;
   onDelete: () => void;
   onOpen: () => void;
+  onDragStart?: (event: PointerEvent<HTMLButtonElement>) => void;
+  onReorderKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
+  onResetPosition?: () => void;
+  dragOffset?: number;
+  reorderDisabled?: boolean;
 };
 
 export function TaskRow({
@@ -56,10 +62,16 @@ export function TaskRow({
   onDuplicate,
   onDelete,
   onOpen,
+  onDragStart,
+  onReorderKeyDown,
+  onResetPosition,
+  dragOffset,
+  reorderDisabled = false,
 }: Props) {
   const [confirming, setConfirming] = useState(false);
   const done = task.status === "done";
   const date = task.dueOn ?? task.scheduledOn;
+  const time = scheduleLabel(task);
   const overdue =
     !done && task.dueOn !== null && new Date(`${task.dueOn}T00:00:00`) < new Date();
   // Uhr signalisiert Dringlichkeit, Kalender nur einen Termin in der Zukunft.
@@ -70,7 +82,7 @@ export function TaskRow({
   // Ohne Beschreibung und Datum ist die Karte einzeilig. Dann muss der Inhalt
   // mittig sitzen: die Aktionssymbole sind 28 px hoch, der Titel nur 20 - mit
   // `items-start` klebte er oben und wirkte versetzt.
-  const multiline = Boolean(task.description) || Boolean(date);
+  const multiline = Boolean(task.description) || Boolean(date) || Boolean(time);
 
   return (
     <div
@@ -91,9 +103,13 @@ export function TaskRow({
         leaving
           ? "translate-x-full opacity-0 ease-[cubic-bezier(0.4,0,0.6,1)]"
           : "ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-accent/50",
+        dragOffset !== undefined && "relative z-20 cursor-grabbing bg-accent shadow-md",
       )}
       // Nutzerfarbe, deshalb Inline-Style statt Klasse - wie bei Projektfarben.
-      style={priority ? { borderLeftColor: priority.color } : undefined}
+      style={{
+        borderLeftColor: priority?.color,
+        transform: dragOffset !== undefined ? `translateY(${dragOffset}px)` : undefined,
+      }}
     >
       {/* Auf die erste Textzeile ausgerichtet, nicht auf die ganze Karte. */}
       <Checkbox
@@ -139,21 +155,42 @@ export function TaskRow({
             {formatDate(date)}
           </span>
         )}
+        {time && <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Clock className="size-3 shrink-0" />{time}
+        </span>}
       </button>
 
       {/* `has-aria-expanded` haelt die Schaltflaechen sichtbar, solange das Menue
           offen ist - sonst blenden sie aus, sobald die Maus zum Menue wandert,
           und das offene Menue haengt an nichts mehr. */}
-      <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 has-aria-expanded:opacity-100">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onOpen}
-          aria-label="Details öffnen"
-          className={ICON_ACTION}
-        >
-          <Maximize2 className="size-4" />
-        </Button>
+      <div className={cn(
+        "flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 has-aria-expanded:opacity-100",
+        dragOffset !== undefined && "opacity-100",
+      )}>
+        {onDragStart ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={reorderDisabled}
+            onPointerDown={onDragStart}
+            onKeyDown={onReorderKeyDown}
+            aria-label={`${task.title} verschieben`}
+            title={`${onResetPosition ? "Feste Position · " : ""}Ziehen oder mit ↑/↓ verschieben`}
+            className={cn(ICON_ACTION, "touch-none cursor-grab active:cursor-grabbing", onResetPosition && "text-(--checkbox-accent)")}
+          >
+            <GripVertical className="size-4" />
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onOpen}
+            aria-label="Details öffnen"
+            className={ICON_ACTION}
+          >
+            <Maximize2 className="size-4" />
+          </Button>
+        )}
         {/* Alles Weitere ins Menue: eine dritte Schaltflaeche haette in einer
             220 px schmalen Spalte den Titel auf wenige Zeichen zusammengedrueckt. */}
         <DropdownMenu>
@@ -170,6 +207,18 @@ export function TaskRow({
             <MoreHorizontal className="size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-auto">
+            {onDragStart && (
+              <DropdownMenuItem onClick={onOpen}>
+                <Maximize2 />
+                Details öffnen
+              </DropdownMenuItem>
+            )}
+            {onResetPosition && (
+              <DropdownMenuItem onClick={onResetPosition}>
+                <RotateCcw />
+                Position zurücksetzen
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={onDuplicate}>
               <Copy />
               Duplizieren

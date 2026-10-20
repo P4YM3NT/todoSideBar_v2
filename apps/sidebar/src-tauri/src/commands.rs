@@ -6,6 +6,7 @@ use crate::{
     window::{self, Sidebar, SidebarState},
 };
 use serde::{Deserialize, Serialize};
+use todo_core::models::{FilterPreset, SortSpec, TaskFilter};
 use tauri::{AppHandle, Emitter, Manager, Wry};
 
 /// Eine Prioritaetsstufe.
@@ -20,6 +21,18 @@ pub struct Priority {
     pub label: String,
     /// Beliebige CSS-Farbe.
     pub color: String,
+}
+
+/// Ausgeliefert wird genau ein Preset. Weitere Vorgaben muessten auf
+/// Prioritaets-IDs zeigen, die jeder Nutzer umbauen darf - das waere von
+/// Anfang an bruechig.
+fn default_presets() -> Vec<FilterPreset> {
+    vec![FilterPreset {
+        id: 1,
+        name: "Standard".into(),
+        filter: TaskFilter::default(),
+        sort: SortSpec::default(),
+    }]
 }
 
 fn default_priorities() -> Vec<Priority> {
@@ -47,9 +60,13 @@ pub struct AppSettings {
     /// Eigene Hintergrundfarbe (beliebige CSS-Farbe). `None` = Themefarbe.
     pub background_color: Option<String>,
     pub priorities: Vec<Priority>,
+    /// Benannte Paare aus Filter und Sortierung, im Filter-Panel waehlbar.
+    pub filter_presets: Vec<FilterPreset>,
     /// Ob Unteraufgaben in den festen Ansichten als eigene Zeilen erscheinen.
     /// Projekte koennen das einzeln ueberschreiben.
     pub show_subtasks: bool,
+    pub notifications: crate::notifications::NotificationSettings,
+    pub calendar_sync: crate::calendar::CalendarSettings,
 }
 
 pub fn load_settings(app: &AppHandle<Wry>) -> AppSettings {
@@ -83,7 +100,14 @@ pub fn load_settings(app: &AppHandle<Wry>) -> AppSettings {
             store::KEY_PRIORITIES,
             default_priorities(),
         ),
+        filter_presets: todo_core::settings::get_or(
+            c,
+            store::KEY_FILTER_PRESETS,
+            default_presets(),
+        ),
         show_subtasks: todo_core::settings::get_or(c, store::KEY_SHOW_SUBTASKS, false),
+        notifications: crate::notifications::load(c),
+        calendar_sync: crate::calendar::load(c),
     })
 }
 
@@ -151,11 +175,28 @@ pub fn set_priorities(app: AppHandle<Wry>, priorities: Vec<Priority>) -> Result<
         .filter(|id| !priorities.iter().any(|p| p.id == *id))
         .collect();
 
+    // Presets zeigen ebenfalls auf Stufen. Bliebe eine geloeschte ID darin
+    // stehen, filterte das Preset stumm ins Leere - man saehe eine leere Liste
+    // und faende nirgends den Grund dafuer.
+    let presets = load_settings(&app).filter_presets;
+    let cleaned: Vec<FilterPreset> = presets
+        .iter()
+        .map(|preset| {
+            let mut next = preset.clone();
+            next.filter.priorities.retain(|id| !removed.contains(id));
+            next
+        })
+        .collect();
+    let presets_changed = cleaned != presets;
+
     store::with(&app, |c| {
         todo_core::settings::set(c, store::KEY_PRIORITIES, &priorities)?;
         // Ohne das zeigen Aufgaben auf eine Stufe, die es nicht mehr gibt.
         for id in &removed {
             todo_core::repo::clear_priority(c, *id)?;
+        }
+        if presets_changed {
+            todo_core::settings::set(c, store::KEY_FILTER_PRESETS, &cleaned)?;
         }
         Ok::<_, todo_core::CoreError>(())
     })
@@ -165,6 +206,19 @@ pub fn set_priorities(app: AppHandle<Wry>, priorities: Vec<Priority>) -> Result<
         app.emit("tasks://changed", ()).map_err(err)?;
     }
     Ok(())
+}
+
+/// Speichert die Presets. Die IDs vergibt das Frontend und verwendet sie nie
+/// erneut - die gemerkte Auswahl je Ansicht zeigt darauf.
+#[tauri::command]
+pub fn set_filter_presets(
+    app: AppHandle<Wry>,
+    presets: Vec<FilterPreset>,
+) -> Result<(), String> {
+    store::with(&app, |c| {
+        todo_core::settings::set(c, store::KEY_FILTER_PRESETS, &presets)
+    })
+    .map_err(err)
 }
 
 #[tauri::command]
